@@ -22,64 +22,98 @@
 
 ## Overview
 
-**RustLoader** is a shellcode loader written in Rust, designed for security research and demonstrating advanced evasion and execution techniques. It focuses on direct memory manipulation using low-level APIs to avoid high-level functions that are easily monitored by EDR/AV solutions.
+**RustLoader** is a shellcode loader written in Rust for security research. It implements multiple defense-evasion techniques to avoid detection by EDR/AV solutions, including debugger detection, ETW patching, human interaction simulation, and encrypted shellcode execution from heap memory.
 
-## Features
+## Evasion Techniques
 
-| Feature | Description |
-|---------|-------------|
-| **Anti-Debugging** | Detects debuggers and prevents execution in monitored environments |
-| **Human Interaction Simulation** | Requires mouse clicks to simulate real user presence before execution |
-| **Low-Level Memory Management** | Direct memory allocation and cleanup via low-level calls |
-| **Encrypted Shellcode Execution** | Decrypts and executes shellcode directly from memory at runtime |
-| **XOR Encryption** | Built-in encoder with random key generation |
+| Technique | Implementation | File |
+|-----------|---------------|------|
+| **Anti-Debugging** | `IsDebuggerPresent` check at startup | `main.rs` |
+| **Sandbox Evasion** | Requires 5 real mouse clicks before execution | `main.rs` |
+| **ETW Blinding** | Patches `EtwEventWrite` via PEB walk + inline ASM | `patch.rs` |
+| **XOR Encryption** | Shellcode encrypted at rest, decrypted in-memory | `shellcode.rs` |
+| **Heap Execution** | Allocates executable heap, no `VirtualAlloc` calls | `shellcode.rs` |
+| **Binary Stripping** | LTO, symbol stripping, size optimization | `Cargo.toml` |
 
-## Project Structure
+## Architecture
 
 ```
 src/
-├── main.rs        — Entry point, security checks and loader initialization
-├── patch.rs       — Runtime process patching for persistence
-├── shellcode.rs   — Shellcode loading and execution
-├── utils.rs       — Utilities (click simulation, delays)
-└── cipher.rs      — XOR payload encoder with random key generation
+├── main.rs        — Entry point: anti-debug, click gate, orchestration
+├── patch.rs       — ETW patch via PEB traversal (inline x64 ASM)
+├── shellcode.rs   — Heap allocation, XOR decryption, shellcode execution
+├── utils.rs       — XOR cipher, sleep utilities
+└── cipher.rs      — Standalone encoder binary (random key generation)
+```
+
+### Execution Flow
+
+```
+main() → IsDebuggerPresent check
+       → Wait for 5 mouse clicks (sandbox evasion)
+       → patch_etw()     → PEB walk → resolve ntdll → patch EtwEventWrite
+       → execute()       → HeapCreate(EXECUTABLE) → HeapAlloc
+                         → copy encrypted shellcode → XOR decrypt in-place
+                         → transmute to fn() → execute
 ```
 
 ## Prerequisites
 
-- **Rust** — Latest stable toolchain
-- **Microsoft Visual C++ Build Tools** — Required for Windows compilation
+- **Rust** stable toolchain (x86_64-pc-windows-msvc)
+- **Windows 10/11 x64**
 
 ## Usage
 
 ### 1. Encode the Payload
 
 ```bash
-cargo run --bin encoding demon.x64.bin
+cargo run --bin encoding -- shellcode.bin
 ```
 
 ```
-Random XOR key generated: 0x60
-Successfully read shellcode from '.\demon.x64.bin'
-Successfully encrypted shellcode with key '0x60'
-Successfully wrote encrypted shellcode to 'encrypted.bin'
+[*] Random XOR key: 0x60
+[!] Set XOR_KEY = 0x60 in src/shellcode.rs before building the loader
+[+] Read 51200 bytes from 'shellcode.bin'
+[+] Encrypted with key 0x60
+[+] Written to 'encrypted.bin'
 ```
 
-### 2. Run the Loader
+### 2. Update the XOR Key
+
+Set the generated key in `src/shellcode.rs`:
+
+```rust
+const XOR_KEY: u8 = 0x60; // Match the encoder output
+```
+
+### 3. Build the Loader
 
 ```bash
-cargo run --bin loader
+cargo build --release --bin loader
 ```
 
-### 3. Build for Release
+The optimized binary will be at `target/release/loader.exe`.
 
-```bash
-cargo build --release
-```
+### Build Profile
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `opt-level` | `"z"` | Minimize binary size |
+| `lto` | `true` | Link-time optimization |
+| `codegen-units` | `1` | Maximum optimization |
+| `panic` | `"abort"` | No unwinding overhead |
+| `strip` | `true` | Remove all symbols |
+
+## Technical Details
+
+- **ETW Patch**: `xor rax, rax; ret` (`48 33 C0 C3`) written to `EtwEventWrite` prologue
+- **PEB Walk**: Inline x64 ASM resolves `ntdll.dll` base via `gs:[0x60] → PEB → Ldr → InMemoryOrderModuleList`
+- **Heap Execution**: `HeapCreate(HEAP_CREATE_ENABLE_EXECUTE)` + `HeapAlloc` avoids `VirtualAlloc` hooks
+- **No Debug Output**: Release builds produce zero console output for stealth
 
 ## Legal Disclaimer
 
-> **This software is intended exclusively for educational and security research purposes.** It is not suitable for production use or illegal activities. Unauthorized use against systems you do not own or have explicit permission to test is illegal. The author assumes no liability for misuse of this software.
+> **This software is intended exclusively for educational and security research purposes.** Unauthorized use against systems you do not own or have explicit permission to test is illegal. The author assumes no liability for misuse of this software.
 
 ## Author
 
