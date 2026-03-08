@@ -1,66 +1,94 @@
+<div align="center">
+
 # RustLoader
 
-<p align="center">
-  <img src="assets/rustloader.jpg">
+**Advanced Shellcode Loader with Anti-Debugging & Evasion**
 
-</p>
+<img src="assets/rustloader.jpg" width="600">
+
+[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
+*A sophisticated shellcode loader built in Rust with multiple evasion techniques*
+
+</div>
+
+---
+
+## Demo
 
 ![POC Demo](assets/poc.gif)
-## 📜 Descripción
-**RustLoader** es un sofisticado cargador de malware desarrollado en Rust, orientado a la investigación y la demostración de técnicas de evasión y ejecución sigilosa. El diseño está centrado en la inyección y ejecución de shellcode cifrado, manejando la memoria de forma directa para evitar las APIs de alto nivel que son fácilmente monitoreables.
 
-## 🌟 Características Destacadas
-- **Detección de Depuradores**: Implementa técnicas avanzadas para detectar depuradores y prevenir ejecución en entornos monitoreados.
-- **Simulación de Interacción Humana**: Requiere múltiples clics de mouse para simular la presencia y interacción de un usuario antes de proceder.
-- **Gestión Avanzada de Memoria**: Gestiona la memoria con llamadas a bajo nivel para asignación y borrado, minimizando la visibilidad ante herramientas de monitoreo.
-- **Ejecución de Shellcode Cifrado**: Ejecuta shellcode cifrado directamente desde la memoria, usando técnicas de desencriptación en tiempo real.
+## Overview
 
-## 🔧 Prerrequisitos
-![Rust Badge](https://img.shields.io/badge/rust-stable-brightgreen.svg)
-![Windows Badge](https://img.shields.io/badge/windows-10-blue.svg)
+**RustLoader** is a shellcode loader written in Rust, designed for security research and demonstrating advanced evasion and execution techniques. It focuses on direct memory manipulation using low-level APIs to avoid high-level functions that are easily monitored by EDR/AV solutions.
 
-- **Rust**: Última versión estable.
-- **Microsoft Visual C++ Build Tools**: Esencial para la compilación en Windows.
+## Features
 
-## 📂 Estructura del Proyecto
-```plaintext
+| Feature | Description |
+|---------|-------------|
+| **Anti-Debugging** | Detects debuggers and prevents execution in monitored environments |
+| **Human Interaction Simulation** | Requires mouse clicks to simulate real user presence before execution |
+| **Low-Level Memory Management** | Direct memory allocation and cleanup via low-level calls |
+| **Encrypted Shellcode Execution** | Decrypts and executes shellcode directly from memory at runtime |
+| **XOR Encryption** | Built-in encoder with random key generation |
+
+## Project Structure
+
+```
 src/
-│
-├── main.rs          - Inicia los procedimientos de seguridad y carga del malware.
-├── patch.rs         - Parchea procesos en ejecución para técnicas de persistencia.
-├── shellcode.rs     - Carga y ejecuta el shellcode.
-└── utils.rs         - Utilidades como simulación de clics y esperas.
-└── cipher.rs         - genera el payload encodeado con simple xor.
-    
+├── main.rs        — Entry point, security checks and loader initialization
+├── patch.rs       — Runtime process patching for persistence
+├── shellcode.rs   — Shellcode loading and execution
+├── utils.rs       — Utilities (click simulation, delays)
+└── cipher.rs      — XOR payload encoder with random key generation
 ```
 
-## 🚀 Uso Encoding payload
-```plaintext
-cargo run --bin encoding demon.x64.bin
+## Prerequisites
 
+- **Rust** — Latest stable toolchain
+- **Microsoft Visual C++ Build Tools** — Required for Windows compilation
+
+## Usage
+
+### 1. Encode the Payload
+
+```bash
+cargo run --bin encoding demon.x64.bin
+```
 
 ```
 Random XOR key generated: 0x60
-
 Successfully read shellcode from '.\demon.x64.bin'
-
 Successfully encrypted shellcode with key '0x60'
-
 Successfully wrote encrypted shellcode to 'encrypted.bin'
-
-## 🔥 Testing loader
-```plaintext
-
-cargo run --bin loader 
-
 ```
 
+### 2. Run the Loader
 
+```bash
+cargo run --bin loader
+```
 
-## ⚠️ Disclaimer
+### 3. Build for Release
 
-Este código está destinado exclusivamente para uso educativo y de investigación. No es adecuado para uso en producción ni para realizar actividades ilegales. Los desarrolladores declinan toda responsabilidad por el uso indebido de este software.
+```bash
+cargo build --release
+```
 
+## Legal Disclaimer
 
+> **This software is intended exclusively for educational and security research purposes.** It is not suitable for production use or illegal activities. Unauthorized use against systems you do not own or have explicit permission to test is illegal. The author assumes no liability for misuse of this software.
 
+## Author
 
+**[@3xploit666](https://github.com/3xploit666)**
+
+---
+
+<div align="center">
+
+*For educational and authorized security testing purposes only.*
+
+</div>
